@@ -1,0 +1,58 @@
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - ./kafka/create-topic.sh:/usr/bin/create-topic.sh
+    command: >
+      bash -c "
+        chmod +x /usr/bin/create-topic.sh &&
+        /etc/confluent/docker/run &
+        sleep 10 &&
+        bash /usr/bin/create-topic.sh &&
+        wait
+      "
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    command: uvicorn api_gateway:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - kafka
+      - user-service
+      - product-service
+
+  user-service:
+    build:
+      context: ./microserviceA
+    command: uvicorn user_service:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    depends_on:
+      - kafka
+
+  product-service:
+    build:
+      context: ./microserviceB
+    command: uvicorn product_service:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    depends_on:
+      - kafka
